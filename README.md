@@ -19,7 +19,7 @@ Additionally you will need another machine with a hypervisor installed to create
 #### Helpful terminology
 
 ## Instructions
-### Part 1 -  Preparation
+### Part 1 -  This summer, prepare your host for OpenStack
 First thing you will need to do is pop in to your "root" user. This will just simplify the process. If you want to do it from a "sudo" user feel free to but these are my instructions and I'm not changing them just for you. Once in the root user we will make sure the system is updated and install some required packages. DKMS is required for building the kernel modules for NVidia vgpu and python3-pip is required to install pip3, which is required to install the python library for Frida, which is used by vgpu_unlock.
 ```
 sudo -i
