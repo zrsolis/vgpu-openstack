@@ -12,6 +12,8 @@ That's a good question. There are a lot of fantastic virtualization management s
 * **Network**: At least one 1Gbps network port. This project will work on a single, flat network, however having VLAN support will allow you to have separate the front-end access to the VMs and use non-tunneled networks. Having a second network port allows for having a physical separation as well.
 * **OS**: For these instructions I am using Ubuntu 20.04 (18.04 is not supported). You CAN use a Red Hat-based distro, such as CentOS 8/RHEL 8, etc., however you will need to adjust the commands in this guide to your distro.
 
+Additionally you will need to get an evaluation license for your GRID guests. Failure to do so will result that the performance inside the VM capped after a certain amount of time, resulting an a framerate that I will describe as "a TI-89 playing Crysis."
+
 Additionally you will need another machine with a hypervisor installed to create a Windows image to use in the OpenStack environment. I used Ubuntu 20.04 Desktop Edition with QEMU/KVM and Virtual Machine Manager for the image creation steps, however you can use other options such as Hyper-V, VirtualBox, ESXi, etc.
 
 #### Helpful terminology
@@ -30,3 +32,17 @@ After you have completed this step, we will need to modify the /etc/hosts file t
 root@vgpu:~# grep 127.0.1.1 /etc/hosts
 #127.0.1.1 vgpu.myquantumcs.com vgpu
 ```
+Finally, we will blacklist the nouveau graphics driver kernel module, as this will interfere with the NVidia driver. Then we will update the initramfs image and reboot for the module change to take effect:
+```
+echo -e "blacklist nouveau\noptions nouveau modeset=0" >> /etc/modprobe.d/nouveau.conf
+update-initramfs -u
+reboot now
+```
+After reboot you should be able to confirm that the nouveau driver is no longer loaded:
+```
+root@vgpu:~# lsmod | grep nouveau
+root@vgpu:~#
+```
+
+### Part 2 - Installing drivers or How I Learned to Stop Worrying and Love the DKMS
+So ... for this part you need teh NVIDIA GRID host drivers for KVM. While the guest drivers are easy enough to come by from just about any cloud provider, the host drivers are a little bit harder to find. I'm not gonna tell you how or where to get them, I'm just gonna assume you have them downloaded and copied to the root users home directory ... moving on ...
