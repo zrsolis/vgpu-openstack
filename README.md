@@ -51,5 +51,9 @@ Assuming you have them in ZIP format, we need to extract them first and we'll pu
 unzip NVIDIA-GRID-Linux-KVM-460.32.04-460.32.03-461.33.zip -d ./GRID && cd ./GRID
 chmod +x NVIDIA-Linux-x86_64-460.32.04-vgpu-kvm.run
 ```
-Now we are ready to install the GRID host driver: 
+Now we are ready to install the GRID host driver:
+``` 
 ./NVIDIA-Linux-x86_64-460.32.04-vgpu-kvm.run --dkms
+```
+![](https://github.com/zrsolis/vgpu-openstack/img/grid-install-1.png)
+![](./img/grid-install-2.png)
