@@ -7,7 +7,7 @@ That's a good question. There are a lot of fantastic virtualization management s
 #### Requiremendations
 * **CPU**: 1+ CPU(s) with as many cores as you can get and support for virtualization.
 * **RAM**: I'd recommend AT LEAST 16GB but 64GB sounds a lot better if you are gonna run more than one instance.
-* **GPU**: An NVidia Maxwell, Pascal or Turing GPU supported by vgpu_unlock. Limited support is available as well for Volta and Ampere models, but check the vgpu_unlock project as new models are added all the time. For my example, I will be using an RTX 2080Ti. More VRAM allows the use of more and/or larger VMs. More than one graphics card can be used however only a single GRID profile can be used per host, so all the cards in the host must support the profile you configure. There is also some indication, but I haven't confirmed myself either way, that mixing families (i.e. using a Maxwell and Turing card) is not supported. Additionally, if you have the capability, do not use the NVidia card as your "primary" video card. If you have an Intel or AMD CPU with integrated graphics or a shitty old video card lying around (yeah, I know some of you still have a Radeon HD 5450 lying around, don't lie) use that as your primary as a small amount of video memory is required for your primary to display to function, meaning it can't be allocated for a VM.
+* **GPU**: An NVidia Maxwell, Pascal or Turing GPU supported by vgpu_unlock. Limited support is available as well for Volta and Ampere models, but check the vgpu_unlock project as new models are added all the time. For my example, I will be using an RTX 2080Ti. More VRAM allows the use of more and/or larger VMs. More than one graphics card can be used however only a single GRID profile can be used per card. There is also some indication, but I haven't confirmed myself either way, that mixing families (i.e. using a Maxwell and Turing card) is not supported. Additionally, if you have the capability, do not use the NVidia card as your "primary" video card. If you have an Intel or AMD CPU with integrated graphics or a shitty old video card lying around (yeah, I know some of you still have a Radeon HD 5450 lying around, don't lie) use that as your primary as a small amount of video memory is required for your primary to display to function, meaning it can't be allocated for a VM.
 * **Disk**: At least 500GB but the more space the better as game libraries add up fast. Also recommend using an SSD.
 * **Network**: At least one 1Gbps network port. This project will work on a single, flat network, however having VLAN support will allow you to have separate the front-end access to the VMs and use non-tunneled networks. Having a second network port allows for having a physical separation as well.
 * **OS**: For these instructions I am using Ubuntu 20.04 (18.04 is not supported). You CAN use a Red Hat-based distro, such as CentOS 8/RHEL 8, etc., however you will need to adjust the commands in this guide to your distro.
@@ -55,5 +55,135 @@ Now we are ready to install the GRID host driver:
 ``` 
 ./NVIDIA-Linux-x86_64-460.32.04-vgpu-kvm.run --dkms
 ```
-![](https://github.com/zrsolis/vgpu-openstack/img/grid-install-1.png)
+![](./img/grid-install-1.png)
 ![](./img/grid-install-2.png)
+
+### Part 3 - install vGPU_unlock
+Now that the NVIDIA GRID driver is installed we can proceed to install vgpu_unlock. In short, this project intercepts the device ID calls and changes them to match a GRID-capable card that uses the same chip as the GeForce card in your system. There's probably more to it than that but I attribute it to wizardry by people way smarter than me. 
+
+First we will need to download the files for the project. For the sake of this tutorial, I'm putting the files in /opt/vgpu_unlock.
+```
+git clone https://github.com/DualCoder/vgpu_unlock /opt/vgpu_unlock
+```
+Now we need to modify the NVIDIA vgpud and vgpu-mgr services to use vgpu_unlock to execute the services. We will do this by modifying the ExecStart line of service unit files:
+```
+systemctl edit nvidia-vgpud.service --full
+```
+![](./img/vgpu-service-vgpud.png)
+```
+systemctl edit nvidia-vgpu-mgr.service --full
+```
+![](./img/vgpu-service-mgr.png)
+Now we need to reload the service unit files with the changes.
+```
+systemctl daemon-reload
+```
+Now we will need to modify some of the NVidia driver files to use vgpu_unlock:
+```
+printf '%s\n' '0?#include?a' '#include "/opt/vgpu_unlock/vgpu_unlock_hooks.c"' . x | ex /usr/src/nvidia-460.32.04/nvidia/os-interface.c 
+echo "ldflags-y += -T /opt/vgpu_unlock/kern.ld" >> /usr/src/nvidia-460.32.04/nvidia/nvidia.Kbuild 
+```
+Next, we need to remove the existing NVidia DKMS kernel module:
+```
+dkms remove -m nvidia -v 460.32.04 --all
+```
+Below is output from the command:
+```
+-------- Uninstall Beginning --------
+Module:  nvidia
+Version: 460.32.04
+Kernel:  5.4.0-80-generic (x86_64)
+-------------------------------------
+
+Status: Before uninstall, this module version was ACTIVE on this kernel.
+
+nvidia.ko:
+ - Uninstallation
+   - Deleting from: /lib/modules/5.4.0-80-generic/updates/dkms/
+ - Original module
+   - No original module was found for this module on this kernel.
+   - Use the dkms install command to reinstall any previous module version.
+
+
+nvidia-vgpu-vfio.ko:
+ - Uninstallation
+   - Deleting from: /lib/modules/5.4.0-80-generic/updates/dkms/
+ - Original module
+   - No original module was found for this module on this kernel.
+   - Use the dkms install command to reinstall any previous module version.
+
+depmod...
+
+DKMS: uninstall completed.
+
+------------------------------
+Deleting module version: 460.32.04
+completely from the DKMS tree.
+------------------------------
+Done.
+
+```
+Now we will rebuild the module with with the vgpu_unlock changes:
+```
+dkms install -m nvidia -v 460.32.04
+```
+Output from running the command:
+```
+Creating symlink /var/lib/dkms/nvidia/460.32.04/source ->
+                 /usr/src/nvidia-460.32.04
+
+DKMS: add completed.
+
+Kernel preparation unnecessary for this kernel.  Skipping...
+
+Building module:
+cleaning build area...
+'make' -j32 NV_EXCLUDE_BUILD_MODULES='' KERNEL_UNAME=5.4.0-80-generic IGNORE_CC_MISMATCH='' modules......
+cleaning build area...
+
+DKMS: build completed.
+
+nvidia.ko:
+Running module version sanity check.
+ - Original module
+   - No original module exists within this kernel
+ - Installation
+   - Installing to /lib/modules/5.4.0-80-generic/updates/dkms/
+
+nvidia-vgpu-vfio.ko:
+Running module version sanity check.
+ - Original module
+   - No original module exists within this kernel
+ - Installation
+   - Installing to /lib/modules/5.4.0-80-generic/updates/dkms/
+
+depmod...
+
+DKMS: install completed.
+```
+
+Now we reboot for all the changes to take effect:
+```
+reboot now
+```
+
+Upon reboot, vgpu_unlock should now be working and the NVIDIA services should be functioning properly. To verify the vgpu-mgr is running properly:
+```
+systemctl status nvidia-vgpu-mgr.service
+```
+The service should be ```Active: active (running)``` and you should see output similar to ```vgpu bash[1129]: vgpu_unlock loaded.``` on one of the log lines.
+![](./img/vgpu-confirm-vgpud.png)
+
+TO verify the vgpud service, run:
+```
+systemctl status nvidia-vgpud.service
+```
+
+The status should be ```Active: inactive (dead)``` and that's fine. The very bottom line should say ```vgpu systemd[1]: nvidia-vgpud.service: Succeeded.``` This indicates that the service ran as needed properly.
+
+
+To confirm vgpu_unlock is working you should now have a device on the "Mediated Device" (MDEV) bus. You should be able to see all available usable cards using the following command: 
+```ls -alh ls -alh /sys/class/mdev_bus/```
+The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). You can confirm this using the ```nvidia-smi``` command.
+![](./img/vgpu-confirm-ls.png)
+![](./img/vgpu-confirm-smi.png)
