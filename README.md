@@ -216,4 +216,26 @@ Once completed you should see ```System is bootstrapped and ready for use.``` ec
 scripts/bootstrap-aio.sh
 ```
 
+At this point we need to make some changes to the OpenStack-Ansible configurations. First we need to determine what kind of GRID profile we will be running on each card on this host. Luckily, I have written a handy one-line script that will provide a list of all the supported profiles that each GPU in your system supports, the corresponding profile name, the amount of VRAM used by the profile and the bus address of the device the profile supports:
+```
+for a in $(ls /sys/class/mdev_bus/); do echo "TYPE         NAME              VRAM                Bus ID" && for i in $(ls /sys/class/mdev_bus/$a/mdev_supported_types); do echo "$i - $(cat /sys/class/mdev_bus/$a/mdev_supported_types/"$i"/name) - $(awk '{print substr($3,1,length($3)-1)}' /sys/class/mdev_bus/$a/mdev_supported_types/"$i"/description)" - $a ; done; done
+```
 
+![](./img/grid-profile-list.png)
+
+What we are looking for are profiles with "-XQ" where X is a number corresponding to the amount of VRAM, in gigabytes, the profile supports. "Q" profiles are "Virtual Workstations" profiles which is the kind we will need for this setup. If you wish to look at the capabilities of the other profile types, feel free but that is beyond the scope of this tutorial. I will include a link below to the NVidia GRID guide that provides a complete list of supported profiles and their capabilities. 
+
+The choice of what profile to use is entirely up to you but the limiting factor is going to be the amount of VRAM of the card. In this case, I am using an RTX 2080TI, which has 11GB of VRAM. This would allow me to use 11x1Q, 5x2Q, 3x3Q, 2x4Q, 1x6Q and 1x8Q allocated vGPUs on a single card.  You should be able to run 1080p comfortably on a 2Q profile, however remember that you are splitting the resources of the card, so the more VMs running the more they are sharing not just memory but GPU performance, so you'll want to make sure to gauge the performance of your VMs. You can use more than one type in a host if you have multiple cards, say if you are some crazy guy with 3x1070Tis and provision them with 2Q profiles but you throw in a 2080Ti and provide some 4Q profiles for "high performance" VMs. 
+
+For this tutorial, I am going to allocate 3Q profiles for this card, which is profile type nvidia-258.  
+
+Now we need to modify the Nova (Compute) service configuration to let it know what profiles are being used by each card. To do this, we will edit the OpenStack-Ansible user_variables file. To do so, using your favorite editor, open /etc/openstack_deploy/user_variables.yml. The option we want to configure is "nova_enabled_vgpu_types: {}" (this option is new to Wallaby so if you sourced a different branch of OpenStack-Ansible this option will not work). Add the config options using the following format:
+```
+nova_enabled_vgpu_types: 
+  - type: nvidia-258
+    address: 0000:02:00.0
+```
+
+![](./img/osa-nova-conf.png)
+
+Type being the profile type selected and address being the PCI Bus address of the device.
