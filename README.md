@@ -189,8 +189,16 @@ To confirm vgpu_unlock is working you should now have a device on the "Mediated 
 
 ```ls -alh ls -alh /sys/class/mdev_bus/```
 
-The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). You can confirm this using the ```nvidia-smi``` command.
+The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). 
+
 ![](./img/vgpu-confirm-ls.png)
+
+You can confirm this using the command:
+
+```
+nvidia-smi
+```
+
 ![](./img/vgpu-confirm-smi.png)
 
 Part 4 - Installing OpenStack-Ansible All-In-One - A(IO) New Hope
