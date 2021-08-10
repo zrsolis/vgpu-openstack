@@ -1,4 +1,4 @@
-# vgpu-openstack
+# VGPU-OpenStack
 The purpose of this project is to provide instructions on how to enable vgpu_unlock (https://github.com/DualCoder/vgpu_unlock) in an OpenStack environment, using OpenStack-Ansible All-in-One (AIO) to deploy the environment.
 
 ## Why VGPU-OpenStack?
@@ -19,12 +19,12 @@ Additionally you will need another machine with a hypervisor installed to create
 #### Helpful terminology
 
 ## Instructions
-### Part 1 -  This summer, prepare your host for OpenStack
-First thing you will need to do is pop in to your "root" user. This will just simplify the process. If you want to do it from a "sudo" user feel free to but these are my instructions and I'm not changing them just for you. Once in the root user we will make sure the system is updated and install some required packages. DKMS is required for building the kernel modules for NVidia vgpu and python3-pip is required to install pip3, which is required to install the python library for Frida, which is used by vgpu_unlock.
+### Part 1 -  This summer, prepare your host for VGPU-OpenStack
+First thing you will need to do is pop in to your "root" user. This will just simplify the process. If you want to do it from a "sudo" user feel free to but these are my instructions and I'm not changing them just for you. Once in the root user we will make sure the system is updated and install some required packages. DKMS is required for building the kernel modules for NVidia vgpu and python3-pip is required to install pip3, which is required to install the python library for Frida, which is used by vgpu_unlock. The unzip package is for extracting the NVIDIA drivers.
 ```
 sudo -i
 apt update && apt upgrade -y
-apt install dkms python3-pip -y
+apt install dkms python3-pip unzip -y
 pip3 install frida
 ```
 After you have completed this step, we will need to modify the /etc/hosts file to ensure that the entry for "127.0.1.1" is disabled. Failure to do so will result in the RabbitMQ server failing to configure and start. Using the editor of your choice (I don't judge here, use vi(m), nano, pico, hex editor, export to a Windows machine and edit in Wordpad, whatever), add a comment to the beginning of the line for the entry for address "127.0.1.1" and save the change. Confirm the change matches below:
@@ -46,3 +46,10 @@ root@vgpu:~#
 
 ### Part 2 - Installing drivers or How I Learned to Stop Worrying and Love the DKMS
 So ... for this part you need teh NVIDIA GRID host drivers for KVM. While the guest drivers are easy enough to come by from just about any cloud provider, the host drivers are a little bit harder to find. I'm not gonna tell you how or where to get them, I'm just gonna assume you have them downloaded and copied to the root users home directory ... moving on ...
+Assuming you have them in ZIP format, we need to extract them first and we'll put them in a subdirectory called "GRID". Assuming you have already done so, you can skip this step and run subsequent commands from where your extracted files are located:
+```
+unzip NVIDIA-GRID-Linux-KVM-460.32.04-460.32.03-461.33.zip -d ./GRID && cd ./GRID
+chmod +x NVIDIA-Linux-x86_64-460.32.04-vgpu-kvm.run
+```
+Now we are ready to install the GRID host driver: 
+./NVIDIA-Linux-x86_64-460.32.04-vgpu-kvm.run --dkms
