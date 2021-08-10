@@ -58,7 +58,7 @@ Now we are ready to install the GRID host driver:
 ![](./img/grid-install-1.png)
 ![](./img/grid-install-2.png)
 
-### Part 3 - install vGPU_unlock - Dial M for MDEV
+### Part 3 - Install vGPU_unlock - Dial M for MDEV
 Now that the NVIDIA GRID driver is installed we can proceed to install vgpu_unlock. In short, this project intercepts the device ID calls and changes them to match a GRID-capable card that uses the same chip as the GeForce card in your system. There's probably more to it than that but I attribute it to wizardry by people way smarter than me. 
 
 First we will need to download the files for the project. For the sake of this tutorial, I'm putting the files in /opt/vgpu_unlock.
@@ -201,7 +201,7 @@ nvidia-smi
 
 ![](./img/vgpu-confirm-smi.png)
 
-Part 4 - Installing OpenStack-Ansible All-In-One - A(IO) New Hope
+### Part 4 - Installing OpenStack-Ansible All-In-One - A(IO) New Hope
 Now we will begin the process of installing OpenStack on the host system. First we will need to download openstack-ansible. We will also be using the "stable/wallaby" branch as it's the latest stable release.
 ```
 git clone -b stable/wallaby https://opendev.org/openstack/openstack-ansible /opt/openstack-ansible && cd /opt/openstack-ansible
