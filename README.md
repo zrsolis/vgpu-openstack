@@ -172,6 +172,7 @@ Upon reboot, vgpu_unlock should now be working and the NVIDIA services should be
 systemctl status nvidia-vgpu-mgr.service
 ```
 The service should be ```Active: active (running)``` and you should see output similar to ```vgpu bash[1129]: vgpu_unlock loaded.``` on one of the log lines.
+
 ![](./img/vgpu-confirm-mgr.png)
 
 T verify the vgpud service, run:
@@ -180,11 +181,14 @@ systemctl status nvidia-vgpud.service
 ```
 
 The status should be ```Active: inactive (dead)``` and that's fine. The very bottom line should say ```vgpu systemd[1]: nvidia-vgpud.service: Succeeded.``` This indicates that the service ran as needed properly.
+
 ![](./img/vgpu-confirm-vgpud.png)
 
 
 To confirm vgpu_unlock is working you should now have a device on the "Mediated Device" (MDEV) bus. You should be able to see all available usable cards using the following command: 
+
 ```ls -alh ls -alh /sys/class/mdev_bus/```
+
 The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). You can confirm this using the ```nvidia-smi``` command.
 ![](./img/vgpu-confirm-ls.png)
 ![](./img/vgpu-confirm-smi.png)
