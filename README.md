@@ -58,7 +58,7 @@ Now we are ready to install the GRID host driver:
 ![](./img/grid-install-1.png)
 ![](./img/grid-install-2.png)
 
-### Part 3 - install vGPU_unlock
+### Part 3 - install vGPU_unlock - Dial M for MDEV
 Now that the NVIDIA GRID driver is installed we can proceed to install vgpu_unlock. In short, this project intercepts the device ID calls and changes them to match a GRID-capable card that uses the same chip as the GeForce card in your system. There's probably more to it than that but I attribute it to wizardry by people way smarter than me. 
 
 First we will need to download the files for the project. For the sake of this tutorial, I'm putting the files in /opt/vgpu_unlock.
@@ -74,7 +74,7 @@ systemctl edit nvidia-vgpud.service --full
 systemctl edit nvidia-vgpu-mgr.service --full
 ```
 ![](./img/vgpu-service-mgr.png)
-Now we need to reload the service unit files with the changes.
+Once completed we need to reload the service unit files with the changes.
 ```
 systemctl daemon-reload
 ```
@@ -172,14 +172,15 @@ Upon reboot, vgpu_unlock should now be working and the NVIDIA services should be
 systemctl status nvidia-vgpu-mgr.service
 ```
 The service should be ```Active: active (running)``` and you should see output similar to ```vgpu bash[1129]: vgpu_unlock loaded.``` on one of the log lines.
-![](./img/vgpu-confirm-vgpud.png)
+![](./img/vgpu-confirm-mgr.png)
 
-TO verify the vgpud service, run:
+T verify the vgpud service, run:
 ```
 systemctl status nvidia-vgpud.service
 ```
 
 The status should be ```Active: inactive (dead)``` and that's fine. The very bottom line should say ```vgpu systemd[1]: nvidia-vgpud.service: Succeeded.``` This indicates that the service ran as needed properly.
+![](./img/vgpu-confirm-vgpud.png)
 
 
 To confirm vgpu_unlock is working you should now have a device on the "Mediated Device" (MDEV) bus. You should be able to see all available usable cards using the following command: 
@@ -187,3 +188,20 @@ To confirm vgpu_unlock is working you should now have a device on the "Mediated 
 The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). You can confirm this using the ```nvidia-smi``` command.
 ![](./img/vgpu-confirm-ls.png)
 ![](./img/vgpu-confirm-smi.png)
+
+Part 4 - Installing OpenStack-Ansible All-In-One - A(IO) New Hope
+Now we will begin the process of installing OpenStack on the host system. First we will need to download openstack-ansible. We will also be using the "stable/wallaby" branch as it's the latest stable release.
+```
+git clone -b stable/wallaby https://opendev.org/openstack/openstack-ansible /opt/openstack-ansible && cd /opt/openstack-ansible
+```
+
+Next we need to run the bootstrap script to prepare the host to execute the Ansible plays:
+```
+scripts/bootstrap-ansible.sh
+```
+Once completed you should see ```System is bootstrapped and ready for use.``` echoed. Now we will proceed to execute the bootstrap-aio script to create the configurations for OpenStack
+```
+scripts/bootstrap-aio.sh
+```
+
+
