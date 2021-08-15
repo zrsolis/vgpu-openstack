@@ -9,12 +9,12 @@ That's a good question. There are a lot of fantastic virtualization management s
 * **RAM**: I'd recommend AT LEAST 16GB but 64GB sounds a lot better if you are gonna run more than one instance.
 * **GPU**: An NVidia Maxwell, Pascal or Turing GPU supported by vgpu_unlock. Limited support is available as well for Volta and Ampere models, but check the vgpu_unlock project as new models are added all the time. For my example, I will be using an RTX 2080Ti. More VRAM allows the use of more and/or larger VMs. More than one graphics card can be used however only a single GRID profile can be used per card. There is also some indication, but I haven't confirmed myself either way, that mixing families (i.e. using a Maxwell and Turing card) is not supported. Additionally, if you have the capability, do not use the NVidia card as your "primary" video card. If you have an Intel or AMD CPU with integrated graphics or a shitty old video card lying around (yeah, I know some of you still have a Radeon HD 5450 lying around, don't lie) use that as your primary as a small amount of video memory is required for your primary to display to function, meaning it can't be allocated for a VM.
 * **Disk**: At least 500GB but the more space the better as game libraries add up fast. Also recommend using an SSD.
-* **Network**: At least one 1Gbps network port. This project will work on a single, flat network, however having VLAN support will allow you to have separate the front-end access to the VMs and use non-tunneled networks. Having a second network port allows for having a physical separation as well.
-* **OS**: For these instructions I am using Ubuntu 20.04 (18.04 is not supported). You CAN use a Red Hat-based distro, such as CentOS 8/RHEL 8, etc., however you will need to adjust the commands in this guide to your distro.
+* **Network**: At least one 1Gbps network port. This project will work on a single, flat network, however having VLAN support will allow you to have separate the front-end access to the VMs and use non-tunneled networks. Having a second network port allows for having a physical separation as well. For this scenario I have a flat network using the address space 10.0.0.0/20. I am going to use the range 10.0.8.0-10.0.8.255 for the external network the VMs will be accessed from. On the host, this network is attached to physical network adapter enp6s0. You will need the logical name of the network adapter attached to your external network. You can find a list of all adpaters and their associated IPs by running the command ```ip a sh```
+* **OS**: For these instructions I am using Ubuntu 20.04 (18.04 is not supported). You CAN use a Red Hat-based distro, such as RHEL 8, however you will need to adjust the commands in this guide to your distro.
 
-Additionally you will need to get an evaluation license for your GRID guests. Failure to do so will result that the performance inside the VM capped after a certain amount of time, resulting an a framerate that I will describe as "a TI-89 playing Crysis."
+Additionally you will need to get an evaluation license for your GRID guests. I will provide a link below. You will need the license to be able to get the GRID driver for KVM, which is required by the host, as well as the software to run the licensing server for the guest instances to use. Running guest instances unlicensed will result that the performance inside the VM capped after a certain amount of time, resulting an a framerate that is around "a TI-89 playing Crysis."
 
-Additionally you will need another machine with a hypervisor installed to create a Windows image to use in the OpenStack environment. I used Ubuntu 20.04 Desktop Edition with QEMU/KVM and Virtual Machine Manager for the image creation steps, however you can use other options such as Hyper-V, VirtualBox, ESXi, etc.
+Additionally you will need another machine with a hypervisor installed to create a Windows image to use in the OpenStack environment. I used Ubuntu 20.04 Desktop Edition with QEMU/KVM and Virtual Machine Manager for the image creation steps, however you can use other options such as Hyper-V, VirtualBox, ESXi, etc. While you CAN install the OS from an ISO in OpenStack, I would not recommend this route and will not provide steps for this.
 
 #### Helpful terminology
 
@@ -45,7 +45,7 @@ root@vgpu:~#
 ```
 
 ### Part 2 - Installing drivers or How I Learned to Stop Worrying and Love the DKMS
-So ... for this part you need teh NVIDIA GRID host drivers for KVM. While the guest drivers are easy enough to come by from just about any cloud provider, the host drivers are a little bit harder to find. I'm not gonna tell you how or where to get them, I'm just gonna assume you have them downloaded and copied to the root users home directory ... moving on ...
+For this part you will need the NVIDIA GRID Linux Drivers for KVM mentioned in the Requiremendations section earlier.
 Assuming you have them in ZIP format, we need to extract them first and we'll put them in a subdirectory called "GRID". Assuming you have already done so, you can skip this step and run subsequent commands from where your extracted files are located:
 ```
 unzip NVIDIA-GRID-Linux-KVM-460.32.04-460.32.03-461.33.zip -d ./GRID && cd ./GRID
@@ -175,7 +175,7 @@ The service should be ```Active: active (running)``` and you should see output s
 
 ![](./img/vgpu-confirm-mgr.png)
 
-T verify the vgpud service, run:
+To verify the vgpud service, run:
 ```
 systemctl status nvidia-vgpud.service
 ```
@@ -187,7 +187,7 @@ The status should be ```Active: inactive (dead)``` and that's fine. The very bot
 
 To confirm vgpu_unlock is working you should now have a device on the "Mediated Device" (MDEV) bus. You should be able to see all available usable cards using the following command: 
 
-```ls -alh ls -alh /sys/class/mdev_bus/```
+```ls -alh /sys/class/mdev_bus/```
 
 The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). 
 
@@ -238,4 +238,23 @@ nova_enabled_vgpu_types:
 
 ![](./img/osa-nova-conf.png)
 
+
 Type being the profile type selected and address being the PCI Bus address of the device.
+
+In this same file, we additionally need to make some adjustments to the "tempest" settings responsible for the creation and configuration of the "public" network, which is the network you will use to access the instances. The values we want to modify are "tempest_public_subnet_allocation_pools" and "tempest_public_subnet_cidr". For "tempest_public_subnet_cidr" this should match the CIDR address of the external, flat network you will be accessing the instances. 
+
+![](./img/osa-temp-conf.png)
+
+Save and exit the file. Now we will need to make a change to the configuration of the underlying networking to have the bridge to the "flat" network point to the proper physical network adapter of the host, otherwise the networks created on OpenStack will be accessible. Open up /etc/openstack_deploy/openstack_user_settings.yml in your editor of choice. 
+
+![](./img/osa-net-conf.png)
+
+Now we are ready to deploy the AIO. Switch to the playbooks directory for openstack-ansible and begin the installation process.
+
+```
+cd /opt/openstack-ansible/playbooks/
+openstack-ansible setup-hosts.yml
+openstack-ansible setup-infrastructure.yml
+openstack-ansible setup-openstack.yml
+
+Depending on the system and the type of disk you are using this entire process can take anywhere from about 30 minutes to two hours.
