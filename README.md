@@ -32,13 +32,25 @@ After you have completed this step, we will need to modify the /etc/hosts file t
 root@vgpu:~# grep 127.0.1.1 /etc/hosts
 #127.0.1.1 vgpu.myquantumcs.com vgpu
 ```
+Next we need to modify the global DNS settings. I'm assuming you are using the Ubuntu default now of Systemd-Resolved. If you are using the older resolvconf method of assigning DNS I will assume you know how to make the necessary modifications so I'm only going to show how to change the Systemd-Resolved settings. This step is necessary as interface-specific DNS settings will not copy over the the method of external connection on the host changes from the default ethernet interface to the bridged interface.
+
+```
+sed -i.bak -e 's/#DNS=/DNS=<space_delimeted_list_of_your_dns_servers>/g' /etc/systemd/resolved.conf 
+systemctl restart systemd-resolved
+```
+
+![](./img/osa-prep-resolved.png)
+
 Finally, we will blacklist the nouveau graphics driver kernel module, as this will interfere with the NVidia driver. Then we will update the initramfs image and reboot for the module change to take effect:
+
 ```
 echo -e "blacklist nouveau\noptions nouveau modeset=0" >> /etc/modprobe.d/nouveau.conf
 update-initramfs -u
 reboot now
 ```
+
 After reboot you should be able to confirm that the nouveau driver is no longer loaded:
+
 ```
 root@vgpu:~# lsmod | grep nouveau
 root@vgpu:~#
@@ -187,7 +199,10 @@ The status should be ```Active: inactive (dead)``` and that's fine. The very bot
 
 To confirm vgpu_unlock is working you should now have a device on the "Mediated Device" (MDEV) bus. You should be able to see all available usable cards using the following command: 
 
-```ls -alh /sys/class/mdev_bus/```
+
+```
+ls -alh /sys/class/mdev_bus/
+```
 
 The output should show a folder with a name that matches the PCI Bus ID of your graphics card(s). 
 
@@ -233,7 +248,7 @@ Now we need to modify the Nova (Compute) service configuration to let it know wh
 ```
 nova_enabled_vgpu_types: 
   - type: nvidia-258
-    address: 0000:02:00.0
+    address: "0000:02:00.0"
 ```
 
 ![](./img/osa-nova-conf.png)
@@ -245,16 +260,99 @@ In this same file, we additionally need to make some adjustments to the "tempest
 
 ![](./img/osa-temp-conf.png)
 
-Save and exit the file. Now we will need to make a change to the configuration of the underlying networking to have the bridge to the "flat" network point to the proper physical network adapter of the host, otherwise the networks created on OpenStack will be accessible. Open up /etc/openstack_deploy/openstack_user_settings.yml in your editor of choice. 
+Save and exit the file. Now we will need to make a change to the configuration of the underlying networking to have the bridge to the "flat" network point to the proper physical network adapter of the host, otherwise the networks created on OpenStack will be accessible. Open up /etc/openstack_deploy/openstack_user_settings.yml in your editor of choice. The section we are looking for is in "global_overrides->provider_networks" We are looking for the provider network with the "net_name" and "type" value of "flat". We need to change the "host_bind_override" value to match the logical name of the host interface used to connector to your network. 
 
 ![](./img/osa-net-conf.png)
 
-Now we are ready to deploy the AIO. Switch to the playbooks directory for openstack-ansible and begin the installation process.
+Once changed, save and exit the file. Now we are ready to deploy the AIO. Switch to the playbooks directory for openstack-ansible and begin the installation process.
 
 ```
 cd /opt/openstack-ansible/playbooks/
 openstack-ansible setup-hosts.yml
 openstack-ansible setup-infrastructure.yml
 openstack-ansible setup-openstack.yml
+```
 
-Depending on the system and the type of disk you are using this entire process can take anywhere from about 30 minutes to two hours.
+Depending on the system and the type of disk you are using this entire process can take anywhere from about 30 minutes to two hours. If you run in to any problems, Google is usually your best friend, however I will include my Discord user below, feel free to PM me, just, ya know, remember I have like a work and a family and all that.
+
+Once completed you should now have a number of LXC containers that have been made. You can confirm this but running the LXC list command ```lxc-ls```. All the containers should have a prefix saying "aio1" which is what the hostname of your machine should now be set to. At the bottom of this tutorial I will include a brief description of what each container does. 
+
+As part of the AIO deployment process, some assets should have already been pre-created for you. To run commands against the OpenStack APIs, you will need to have the OpenStack client installed on the machine you are running commands from. Fortunately, the AIO process includes a "utility" container which has the client pre-installed. Access the utility container by running the following command: 
+
+```
+lxc-attach -n $(lxc-ls -1 | grep utility)
+```
+
+Before running the commands, you will want to source the "openrc" file that has been created. This includes the configuration for accessing the API endpoints as well as the admin username and password. This file will be located inside the home folder of the root user (/root):
+
+```
+source /root/openrc
+```
+
+For the steps later that require access to the GUI you will want to cat this file to pull the generated password for the admin account.
+
+Before we begin though we will want to make a small change to the networking inside of OpenStack. Two networks should have been created in the OpenStack environment. You can confirm this now by running the OpenStack client command:
+
+```
+openstack network list
+```
+
+![](./img/os-net-list.png)
+
+You should see two networks, "private" and "public". You can get the detail for each network by using the command ```openstack network show <network_name_or_id>```:
+
+```
+openstack network show private
+openstack network show public
+```
+
+![](./img/os-net-private.png)
+![](./img/os-net-public.png)
+
+For the private network, the one field we need to pull right now is the "subnets" value. The subnet provides a block of addressible IPs to a network and additional configuration data. Without going too deep in to the black magic that is Neutron, networks can have multiple subnets however a subnet can only belong to one network. Usually however you will only see one subnet per network and for this tutorial you will only need the one. Get the current configuration of the subnet by using :
+
+```
+openstack subnet show <id_of_subnet_from_network_command>
+```
+
+![](./img/os-sub-private.png)
+
+What you'll see is the "enable_dhcp" field is wet to "False". We need to set this to true. To correct this run:
+```
+openstack subnet set --dhcp <id_of_subnet_from_network_command>
+```
+
+There will be no output from this command, run your "openstack subnet show" command you previously executed and you should now see the "enable_dhcp" value set to "true".
+
+Last thing we want to do before the next part is verify that the Placement service see that you have allocatable vgpus. To do this let's get a list of all the resources the Placement service sees:
+
+```
+openstack resource provider list
+```
+
+![](./img/os-resource-list.png)
+
+You should see one provider with the hostname and another with the same hostname but appended is the PCI bus ID that should match the PCI bus ID of your gpu (which you configured in the OpenStack deployment settings previously). Get the ID value of of the listing with the PCI bus ID and use the value for the command:
+
+```
+openstack resource provider inventory list <ID_of_resource_provide_with_PCI_ID>
+```
+
+![](./img/os-resource-inventory.png)
+
+You should have an entry with a "resource_class" of "VGPU".
+
+Congratulations, you now have a working OpenStack environment with allocatable vGPUs.
+
+### Part 5 - Do you wanna build an image?
+
+So I'm sure at this point you might be asking "Can't I just mount an ISO and install Windows from inside OpenStack?" Yes ... you could ... but it's not trivial and it's not how OpenStack is designed to work. For this tutorial, it'll be easiest to create a golden image inside another VM. The easiest method would be to use Qemu+KVM from another Ubuntu machine which is what I'm doing, accessing via Virtual Machine Manager. This method natively creates a qcow2 image which is easiest to work with, however you can just as easily use Hyper-V, VirtualBox or VMWare and I will include a step below on how to convert the image to the qcow2.
+
+So go ahead and fire up your virtualization platform and install Windows 10. It's okay I can wait. However after it's installed and you get to the "Out of Box Experience" (OOBE), do not continue with the configuration of your VM
+
+
+
+
+
+## Links:
+VGPU Unlock - https://github.com/DualCoder/vgpu_unlock
