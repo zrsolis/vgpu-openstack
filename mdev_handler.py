@@ -2,6 +2,7 @@ import os
 import libvirt
 import logging
 import configparser
+import subprocess
 from xml.etree import ElementTree as et
 conn = libvirt.openReadOnly('qemu:///system')
 
@@ -22,8 +23,14 @@ def create_mdev(devices):
 def delete_mdev(devices):
     for device in devices:
         device_path = f'/sys/bus/mdev/devices/{device}/remove'
-        print(os.system('echo "1" > {device_path}')
-        logging.info(f'Removed vGPU device with UUID: {device}')
+        cmd = f'echo "1" > {device_path}'
+        try:
+            subprocess.call(cmd, shell=True)
+            logging.info(f'Removed vGPU device with UUID: {device}')
+        except:
+            print('Something went wrong attempting to remove vGPU device')
+            logging.error(f'Error attempting to remove vGPU device with UUID: {device}')
+        return
 
 def get_pci_bus_id(device):
     pass
@@ -38,7 +45,7 @@ def get_uuids_from_bus():
     except FileNotFoundError:
         logging.error(f"Directory {MDEV_BASE_DIR} does not exist. If these are sr-iov based cards please make sure /usr/lib/nvidia/sriov-manage was run successfully. Otherwise, I don't know, I'm just an error message.")
         print(f'Unable to locate directory {MDEV_BASE_DIR}')
-        quit()
+    return
 
 
 def get_uuids_from_libvirt():
